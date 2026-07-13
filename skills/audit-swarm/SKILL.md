@@ -1,6 +1,6 @@
 ---
 name: audit-swarm
-description: Multi-lens parallel codebase audit for production readiness — ideate repo-specific failure-mode lenses, fan out parallel finder subagents, adversarially verify every HIGH/MED with refute-by-default skeptics, consolidate a severity-ranked findings report. Modes full | lenses | coverage | delta | fix. Use when the user wants to audit, harden, systematically debug, or make a codebase production ready.
+description: Parallel multi-lens codebase audit with adversarially verified, severity-ranked findings. Modes full | lenses | coverage | delta | fix. Use to audit, harden, systematically debug, or make code production ready.
 ---
 
 # Audit Swarm
@@ -86,6 +86,10 @@ Workflow({
 })
 ```
 
+Cost tiering: mechanical lenses (stubs, comment liars, dependency pins, exception
+audit) may add `model: "haiku", effort: "low"` per lens; semantic lenses (concurrency,
+contracts, abuse, mock seams) stay on the default. Skeptics always use the default.
+
 Immediately record the returned runId in 00-PLAN.md Status. If interrupted, resume:
 `Workflow({scriptPath, resumeFromRunId})`.
 
@@ -93,9 +97,9 @@ Immediately record the returned runId in 00-PLAN.md Status. If interrupted, resu
 second, separate Workflow call. Calibration findings NEVER enter the real set.
 
 Script returns `{ coverage, deduped, verified, lowInfo, filesReadUnion,
-md_verification, md_summary }`. Then:
+md_verification, md_summary, md_logs }`. Then:
 - re-run any lens whose coverage row says FAILED (one-element lenses array);
-- write one `NN-<lens>.md` log per lens from `deduped` + coverage;
+- write each `md_logs` entry verbatim to `<dir>/<entry.file>`;
 - diff `filesReadUnion` against the Phase 0 in-scope list → blind-spot list; spawn a
   gap-fill reader if blind spots include high-stakes areas;
 - write `verdicts/<id>-verdict.md` per `verified` entry;

@@ -8,10 +8,12 @@ export const meta = {
 }
 
 // args contract (built by the orchestrator, everything else is fixed here):
-//   lenses:   [{ key: string, prompt: string, panel?: boolean }]
+//   lenses:   [{ key: string, prompt: string, panel?: boolean, model?: string, effort?: string }]
 //             panel: true → HIGH findings from this lens get a 3-skeptic majority panel
+//             model/effort: per-lens finder override ('haiku'/'low' fits mechanical
+//             lenses); skeptics always run on the top-level model
 //   priorIds: string[]  — "ID — one-line topic" rows; [] if none
-//   model:    string    — finder/skeptic model, default 'sonnet'
+//   model:    string    — default finder model + all skeptics, default 'sonnet'
 
 if (!args || !Array.isArray(args.lenses) || args.lenses.length === 0 || args.lenses.some((l) => !l.key || !l.prompt)) {
   throw new Error('args.lenses must be a non-empty array of {key, prompt} — see SKILL.md Phase 2+3 for the args contract')
@@ -108,7 +110,13 @@ phase('Find')
 log(`Launching ${LENSES.length} finders (${MODEL})`)
 const raw = await parallel(
   LENSES.map((l) => () =>
-    agent(finderPrompt(l), { label: `find:${l.key}`, phase: 'Find', model: MODEL, schema: FINDER_SCHEMA })
+    agent(finderPrompt(l), {
+      label: `find:${l.key}`,
+      phase: 'Find',
+      model: l.model || MODEL,
+      ...(l.effort ? { effort: l.effort } : {}),
+      schema: FINDER_SCHEMA,
+    })
   )
 )
 
@@ -222,6 +230,23 @@ const md_verification = verified
   })
   .join('\n\n')
 
+const md_logs = coverage.map((c, li) => {
+  const perLens = findings.filter((f) => f.lens === c.lens)
+  const md = [
+    `# Lens ${String(li + 1).padStart(2, '0')} — ${c.lens}`,
+    '',
+    `Status: ${c.status}. Files read: ${c.filesRead || 0}. Findings: ${perLens.length}.`,
+    '',
+    `Coverage: ${c.coverage}`,
+    '',
+    ...perLens.map(
+      (f) =>
+        `- **${f.id}** [${f.severity}] \`${f.file_line}\` — ${f.claim}\n  - Scenario: ${f.failure_scenario}\n  - Evidence: ${f.evidence || '(none quoted)'}`
+    ),
+  ].join('\n')
+  return { lens: c.lens, file: `${String(li + 1).padStart(2, '0')}-${c.lens}.md`, md }
+})
+
 return {
   coverage,
   deduped,
@@ -230,4 +255,5 @@ return {
   filesReadUnion,
   md_summary,
   md_verification,
+  md_logs,
 }

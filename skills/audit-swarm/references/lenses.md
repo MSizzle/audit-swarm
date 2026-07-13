@@ -21,6 +21,10 @@ Read this file fully — every section applies.
 4. Tag `panel: true` on lenses whose HIGHs justify a 3-skeptic majority panel:
    money movement, auth/privilege, anything where a wrong CONFIRMED/REFUTED verdict
    is expensive. Everything else gets one skeptic.
+   Cost tiering: mechanical lenses (#6 supply chain, #12 comment liars, #13
+   exceptions, #14 stubs, #16 resources) may carry `model: "haiku", effort: "low"` —
+   pattern-hunting, not whole-system reasoning. Semantic lenses (#1-#5, #8, #11,
+   #15, #17, #18) stay on the default model.
 5. A good lens: names one concrete failure class, cuts across many files, and has a
    falsifiable output ("every X checked against Y").
 6. Delta mode: pick only lenses relevant to the changed files' nature (schema change
