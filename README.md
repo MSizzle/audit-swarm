@@ -1,5 +1,7 @@
 # audit-swarm
 
+![audit-swarm: a hive of agents inspecting a codebase](assets/banner.jpg)
+
 A Claude Code skill that audits a codebase the way a red team would: many independent lenses in parallel, every finding attacked by a skeptic before it reaches the report, and a ledger so the next run starts smarter than the last.
 
 ## Why it exists
