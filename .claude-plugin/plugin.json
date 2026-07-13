@@ -1,0 +1,13 @@
+{
+  "name": "audit-swarm",
+  "description": "Multi-lens parallel codebase audit for production readiness: repo-specific failure-mode lenses, parallel finder subagents, refute-by-default adversarial verification, severity-ranked findings report with cross-run learning.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Monty Singer",
+    "url": "https://github.com/MSizzle"
+  },
+  "homepage": "https://github.com/MSizzle/audit-swarm",
+  "repository": "https://github.com/MSizzle/audit-swarm",
+  "license": "MIT",
+  "keywords": ["audit", "code-review", "security", "production-readiness", "subagents", "debugging"]
+}
