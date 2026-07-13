@@ -80,6 +80,26 @@ Modes: `full` (coverage readers + lenses), `lenses`, `coverage`, `delta`, `fix`.
 - Skeptic reproduction is restricted to one action: write a failing test in a temporary git worktree and run that single test. Application entry points, deploy scripts, migrations against real databases, network calls, and anything touching credentials are explicitly forbidden in the prompt. Read that block in `references/workflow.js` before auditing a repo with live credentials, and judge for yourself.
 - Audit artifacts (finding logs quote raw code) are written to a directory registered in `.git/info/exclude`, never committed.
 
+## Concepts and techniques inside
+
+For readers mapping this to the research and tooling vocabulary:
+
+| Concept | Where it lives here |
+|---------|--------------------|
+| Multi-agent orchestration, parallel fan-out (map-reduce over agents) | One finder subagent per lens, launched concurrently by a deterministic workflow script |
+| LLM-as-judge, adversarial verification, false-positive reduction | Refute-by-default skeptic per HIGH/MED finding; kills ~20-25% of raw findings |
+| Ensemble voting, self-consistency, majority vote | 3-skeptic panels on money/auth findings; PANEL-SPLIT escalates to the orchestrator |
+| Mutation testing, fault injection, bug seeding, recall measurement | `--calibrate`: synthetic defects planted in a throwaway git worktree, finder recall reported |
+| Structured outputs, JSON Schema validation | Finder and verdict schemas enforced at the tool-call layer, no free-text parsing |
+| Context engineering, progressive disclosure, prompt compression | Thin skill spine, per-phase reference files, fixed script the orchestrator never reads |
+| Sandboxing, isolation | Reproduction restricted to a failing test in a temporary git worktree |
+| Deduplication, incremental analysis | Cross-lens dedupe by location and claim stem; delta mode scopes to changed files, callers, and seams |
+| Coverage attestation, blind-spot detection | Schema-enforced `files_read` unioned and diffed against the in-scope inventory |
+| Knowledge persistence, cross-run learning | Per-repo JSON ledger: closed/refuted/WONTFIX dedupe plus per-lens precision stats |
+| Regression testing, atomic commits | Fix mode requires a test that fails without the fix, one commit per finding, adversarial diff review |
+
+The lens menu itself covers the classic defect taxonomy: race conditions and TOCTOU, idempotency and crash recovery, injection (SQL, command, template, path traversal), authn/authz gaps and privilege escalation, secrets and PII/PHI leakage, dependency pinning and supply-chain risk, configuration drift, timezone and clock-skew edges, resource leaks, dead code and stubs, test-coverage gaps and mock drift, cross-service contract drift. It complements SAST/linters rather than replacing them: static analyzers catch pattern-matchable defects; the lenses target semantic bugs that need whole-system reasoning.
+
 ## Layout
 
 ```

@@ -9,5 +9,5 @@
   "homepage": "https://github.com/MSizzle/audit-swarm",
   "repository": "https://github.com/MSizzle/audit-swarm",
   "license": "MIT",
-  "keywords": ["audit", "code-review", "security", "production-readiness", "subagents", "debugging"]
+  "keywords": ["audit", "code-review", "security", "production-readiness", "subagents", "debugging", "multi-agent", "llm-as-judge", "adversarial-verification", "static-analysis", "mutation-testing", "code-quality", "bug-detection", "agent-orchestration", "devsecops"]
 }
