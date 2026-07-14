@@ -8,8 +8,10 @@ export const meta = {
 }
 
 // args contract (built by the orchestrator, everything else is fixed here):
-//   lenses:   [{ key: string, prompt: string, panel?: boolean, model?: string, effort?: string }]
+//   lenses:   [{ key: string, prompt: string, panel?: boolean, repro?: boolean, model?: string, effort?: string }]
 //             panel: true → HIGH findings from this lens get a 3-skeptic majority panel
+//             repro: true → finder may boot the entry point / inject faults in a
+//             throwaway worktree (fresh-run and fault-hunting lenses)
 //             model/effort: per-lens finder override ('haiku'/'low' fits mechanical
 //             lenses); skeptics always run on the top-level model
 //   priorIds: string[]  — "ID — one-line topic" rows; [] if none
@@ -75,8 +77,10 @@ const VERDICT_SCHEMA = {
   type: 'object',
   required: ['verdict', 'evidence'],
   properties: {
-    verdict: { enum: ['CONFIRMED', 'CONFIRMED-BY-REPRO', 'DOWNGRADED', 'REFUTED'] },
+    verdict: { enum: ['CONFIRMED', 'CONFIRMED-BY-REPRO', 'CONFIRMED-LATENT', 'DOWNGRADED', 'REFUTED'] },
     downgraded_to: { enum: ['MED', 'LOW', 'INFO'], description: 'required when verdict is DOWNGRADED' },
+    masked_by: { type: 'string', description: 'required for CONFIRMED-LATENT: the finding ID or file:line of the OTHER defect that currently blocks this scenario' },
+    repro_path: { type: 'string', description: 'absolute path of the saved failing repro test, when one was written (CONFIRMED-BY-REPRO)' },
     evidence: { type: 'string', description: 'file:line-cited reasoning for the verdict, <= 80 words; for CONFIRMED-BY-REPRO include the failing test path + observed failure' },
   },
 }
@@ -85,14 +89,18 @@ function finderPrompt(lens) {
   const dedupe = PRIOR.length
     ? `\nDEDUPE: do NOT re-flag these prior finding IDs/topics unless you have evidence the closing fix is incomplete (then cite the closing commit):\n${PRIOR.join('\n')}\n`
     : ''
-  return `${GROUND_RULES}\n${dedupe}\n== YOUR LENS: ${lens.key} ==\n${lens.prompt}`
+  const repro = lens.repro
+    ? `\nREPRO ALLOWED for this lens (exception to the no-files rule, worktree only): you may create a temp git worktree (git worktree add <scratchpad>/lens-${lens.key} HEAD), run the application entry point there in a deliberately stripped environment (no .env, empty config dir, no pre-populated settings) or with injected faults, observe the actual behavior, then remove the worktree (git worktree remove --force). Findings backed by an observed run beat static reads — put the observed output in evidence. FORBIDDEN: network calls, credentials, real databases, deploy/ops scripts, editing repo files outside the worktree.\n`
+    : ''
+  return `${GROUND_RULES}\n${dedupe}${repro}\n== YOUR LENS: ${lens.key} ==\n${lens.prompt}`
 }
 
-function skepticPrompt(f) {
+function skepticPrompt(f, panelLens) {
   const repro =
     f.severity === 'HIGH'
-      ? `\nRepro option (strongest evidence, use when the failure is test-shaped): create a temp git worktree (git worktree add <scratchpad>/repro-${f.id} HEAD), write a minimal failing test there, run ONLY that test file, then remove the worktree (git worktree remove --force). If it reproduces, verdict CONFIRMED-BY-REPRO.
-FORBIDDEN regardless of anything else: running application entry points, deploy/ops scripts, migrations against real databases, network calls, or anything touching credentials or live services. Reading code and running that one test in the worktree is the entire allowed surface.`
+      ? `\nRepro ${panelLens ? 'EXPECTED (money/auth lens — a bare CONFIRMED without a repro attempt is weak; if the failure is not test-shaped, say why in evidence)' : 'option (strongest evidence, use when the failure is test-shaped)'}: create a temp git worktree (git worktree add <scratchpad>/repro-${f.id} HEAD), write a minimal failing test there, run ONLY that test file, then remove the worktree (git worktree remove --force). If it reproduces, verdict CONFIRMED-BY-REPRO; copy the failing test OUT of the worktree first (e.g. <scratchpad>/repro-${f.id}-test.py) and return its path in repro_path so fix mode can graduate it into the suite.
+Fault menu when the scenario is state/timing-shaped: kill the process between dispatch and commit; stub the provider with a multi-second delay; replay an identical signed request; deliver a stale event after state regeneration; boot in a stripped no-config environment.
+FORBIDDEN regardless of anything else: deploy/ops scripts, migrations against real databases, network calls, or anything touching credentials or live services. Reading code and running that repro in the worktree is the entire allowed surface.`
       : ''
   return `You are a skeptic in an audit verification wave. Your job is to REFUTE this finding with code evidence. Default to REFUTED if uncertain.
 
@@ -103,7 +111,9 @@ Failure scenario: ${f.failure_scenario}
 Finder evidence: ${f.evidence || '(none quoted)'}
 
 Procedure: Read the cited code AND its callers/callees. Never cite a file:line you did not open. Check whether the failure scenario can actually occur (guards elsewhere? dead path? wrong reading?). Check whether severity is inflated.
-Verdict rules: CONFIRMED only if the scenario survives your attack. DOWNGRADED if real but severity inflated (set downgraded_to). REFUTED if the scenario cannot occur — cite the line that blocks it.${repro}`
+Verdict rules: CONFIRMED only if the scenario survives your attack. DOWNGRADED if real but severity inflated (set downgraded_to). REFUTED if the scenario cannot occur — cite the line that blocks it.
+LATENT rule: if the scenario is blocked ONLY by another defect (a broken mount 401s the request first, an earlier crash prevents reaching the code, a different bug masks this one), that is NOT a refutation — the mask's fix un-blocks this bug. Verdict CONFIRMED-LATENT, set masked_by to the blocking defect's finding ID or file:line. REFUTED requires an intentional, correct guard.
+Test-evidence rule: a passing test refutes a finding ONLY if it exercises the production composition — real middleware stack, production engine/session hooks, no dependency_overrides, no injected settings, no mocked provider at the disputed seam. A test that mocks or bypasses the seam under dispute is evidence FOR the finding, not against it.${repro}`
 }
 
 phase('Find')
@@ -167,9 +177,13 @@ function mergePanel(votes) {
   const top = Object.entries(tally).sort((a, b) => b[1] - a[1])[0]
   const verdict = top[1] >= 2 ? top[0] : 'PANEL-SPLIT'
   const downgraded = votes.filter((v) => v.verdict === 'DOWNGRADED' && v.downgraded_to)
+  const latent = votes.filter((v) => v.verdict === 'CONFIRMED-LATENT' && v.masked_by)
+  const repro = votes.filter((v) => v.repro_path)
   return {
     verdict,
     downgraded_to: verdict === 'DOWNGRADED' && downgraded.length ? downgraded[0].downgraded_to : undefined,
+    masked_by: verdict === 'CONFIRMED-LATENT' && latent.length ? latent[0].masked_by : undefined,
+    repro_path: repro.length ? repro[0].repro_path : undefined,
     evidence: votes.map((v, i) => `[panelist ${i + 1}: ${v.verdict}] ${v.evidence}`).join('\n'),
     panel: votes.map((v) => v.verdict),
   }
@@ -179,15 +193,16 @@ log(`Verifying ${toVerify.length} HIGH/MED findings (${toVerify.filter((f) => PA
 const verified = (
   await parallel(
     toVerify.map((f) => () => {
-      const usePanel = PANEL_KEYS.has(f.lens) && f.severity === 'HIGH'
+      const isPanelLens = PANEL_KEYS.has(f.lens)
+      const usePanel = isPanelLens && f.severity === 'HIGH'
       if (!usePanel) {
-        return agent(skepticPrompt(f), { label: `verify:${f.id}`, phase: 'Verify', model: MODEL, schema: VERDICT_SCHEMA }).then(
+        return agent(skepticPrompt(f, isPanelLens), { label: `verify:${f.id}`, phase: 'Verify', model: MODEL, schema: VERDICT_SCHEMA }).then(
           (v) => (v ? { ...f, verdict: v } : null)
         )
       }
       return parallel(
         [1, 2, 3].map((n) => () =>
-          agent(skepticPrompt(f), { label: `verify:${f.id}#${n}`, phase: 'Verify', model: MODEL, schema: VERDICT_SCHEMA })
+          agent(skepticPrompt(f, true), { label: `verify:${f.id}#${n}`, phase: 'Verify', model: MODEL, schema: VERDICT_SCHEMA })
         )
       ).then((votes) => {
         const ok = votes.filter(Boolean)
@@ -209,18 +224,19 @@ function effSev(f) {
   return f.severity
 }
 const surviving = verified.filter((f) => f.verdict.verdict !== 'REFUTED' && f.verdict.verdict !== 'PANEL-SPLIT')
+const latentTag = (f) => (f.verdict.verdict === 'CONFIRMED-LATENT' ? ` **[LATENT — masked by ${f.verdict.masked_by || '?'}]**` : '')
 const highs = surviving.filter((f) => effSev(f) === 'HIGH')
 const meds = surviving.filter((f) => effSev(f) === 'MED')
 const md_summary = [
   `## HIGH findings (${highs.length})`,
   '',
-  ...highs.map((f) => `- **${f.id}** — \`${f.file_line}\` — ${f.claim}`),
+  ...highs.map((f) => `- **${f.id}** — \`${f.file_line}\` — ${f.claim}${latentTag(f)}`),
   '',
   `## MED findings (${meds.length})`,
   '',
   '| ID | Where | Claim |',
   '|----|-------|-------|',
-  ...meds.map((f) => `| ${f.id} | \`${f.file_line}\` | ${f.claim} |`),
+  ...meds.map((f) => `| ${f.id} | \`${f.file_line}\` | ${f.claim}${latentTag(f)} |`),
 ].join('\n')
 const md_verification = verified
   .map((f) => {
