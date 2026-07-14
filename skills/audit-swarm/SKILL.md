@@ -71,8 +71,10 @@ adversarial verification (~20–25% of raw HIGH/MEDs get refuted or downgraded).
    promises). Write into 00-PLAN.md §contract; lens #20's prompt embeds them.
 5. Operator journeys: list the 3–8 end-to-end flows a real operator/patient/staff
    member performs (fresh install → first success, staff retries a failure, patient
-   receives a notice...). Write into 00-PLAN.md §journeys — the Phase 4 decision
-   keys to these.
+   receives a notice...). Tag any journey not runnable in this environment
+   (`NEEDS-windows`, `NEEDS-live-provider`) — those get static walks plus an
+   explicit human gate, never silent omission. Write into 00-PLAN.md §journeys —
+   lens #21 walks these and the Phase 4 decision keys to them.
 6. `git log --oneline -50`; note domain stakes (money? PII/PHI? creds?).
 7. Note test suites: which run in CI, which need special infra.
 8. `mkdir` audit dir; append it (and ledger path, once) to `.git/info/exclude`.
@@ -113,9 +115,10 @@ Workflow({
 ```
 
 Prompt-building duties: lens #4's prompt embeds the Phase 0 seam census verbatim;
-lens #20's prompt embeds the contract clauses verbatim; lens #17 gets `repro: true`
-when the repo ships an artifact (fresh-run boot). Skeptics enforce the latent rule
-and the test-evidence discount automatically (fixed in the script).
+lens #20's prompt embeds the contract clauses verbatim; lens #21's prompt embeds
+the journeys verbatim (env tags included) and carries `panel: true`; lens #17 gets
+`repro: true` when the repo ships an artifact (fresh-run boot). Skeptics enforce
+the latent rule and the test-evidence discount automatically (fixed in the script).
 
 Cost tiering: mechanical lenses (stubs, comment liars, dependency pins, exception
 audit) may add `model: "haiku", effort: "low"` per lens; semantic lenses (concurrency,

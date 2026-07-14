@@ -27,8 +27,8 @@ Dedupe list below is mandatory finder input. This dir is git-excluded, never com
 ## Contract clauses                     <!-- Phase 0 step 4; embed in lens #20 prompt -->
 <clause — source doc:line, one per row; or "no requirement docs found">
 
-## Journeys                             <!-- Phase 0 step 5; Phase 4 decision keys to these -->
-<J1: one-line end-to-end flow, one per row>
+## Journeys                             <!-- Phase 0 step 5; lens #21 walks these; Phase 4 decision keys to them -->
+<J1: one-line end-to-end flow [NEEDS-<env> tag if not runnable here], one per row>
 
 ## Lenses / readers
 | # | Log | Lens/Area | Panel | Repro | Focus or file list |
@@ -101,7 +101,10 @@ installed, migration rehearsal not run, E2E suite skipped, no live-provider test
 ## Journey verdict
 | Journey | Status | Blocking IDs |
 |---------|--------|--------------|
-| <J1 one-line flow> | PROVEN / UNPROVEN / BROKEN | <IDs or -> |
+| <J1 one-line flow> | PROVEN / UNPROVEN / BROKEN / NEEDS-<env> | <IDs or -> |
+
+NEEDS-<env> rows are human gates: statically walked (lens #21) but unprovable
+here — list what run would prove them.
 
 **Decision: <SHIP | BLOCK> — <one sentence, derived from the journey table and
 standing residuals, NOT from finding counts. "All findings dispositioned" is not

@@ -17,6 +17,8 @@ Read this file fully — every section applies.
    - ships an installable artifact (MSI/installer/packaged binary) → #17 with
      `repro: true` — static walk of the first-run path is not enough
    - has human-facing surfaces (templates, SMS/email, CLI help) → #19
+   - full/lenses mode → #21 (journeys always exist after Phase 0; the journey walk
+     is what turns them from a scoring rubric into a bug hunt), `panel: true`
 3. Ledger stats prune the menu (from `.planning/audit-ledger.json` lens rows):
    - 0 findings in 2 consecutive runs → retire the lens for this repo.
    - >70% of its HIGH/MEDs refuted → rewrite its prompt or drop it (noise generator).
@@ -28,9 +30,9 @@ Read this file fully — every section applies.
    Cost tiering: mechanical lenses (#6 supply chain, #12 comment liars, #13
    exceptions, #14 stubs, #16 resources) may carry `model: "haiku", effort: "low"` —
    pattern-hunting, not whole-system reasoning. Semantic lenses (#1-#5, #8, #11,
-   #15, #17-#20) stay on the default model. Repro-flagged lenses (#17 with an
-   artifact) and #20 are the expensive additions — mandatory when their stakes row
-   triggers, opt-in otherwise.
+   #15, #17-#21) stay on the default model. Repro-flagged lenses (#17 with an
+   artifact), #20, and #21 are the expensive additions — mandatory when their
+   stakes row triggers, opt-in otherwise.
 5. A good lens: names one concrete failure class, cuts across many files, and has a
    falsifiable output ("every X checked against Y").
 6. Delta mode: pick only lenses relevant to the changed files' nature (schema change
@@ -53,6 +55,18 @@ Read this file fully — every section applies.
 2. **Crash-recovery & idempotency** — process dies between step N and N+1: what
    replays, what duplicates, what wedges? Recovery paths retrying without
    backoff/cooldown; markers that create hot loops.
+   Dispatch-point census (mandatory, enumerable — do not skim for this): grep every
+   external side-effect call site (provider dispatch, payment create, message send)
+   and check EACH against: (a) is the evidence that we attempted this (idempotency
+   key, request ID) COMMITTED before the call, or only mutated in an open
+   transaction? (b) process dies mid-call — what does restart see? (c) call
+   succeeds but the response is lost — retryable without duplicating? (d) the
+   error handler records failure evidence — does that evidence survive the
+   transaction the exception is about to roll back?
+   Late-event census: for every handler matching external events to local state by
+   ID/number — can the state have been deleted/regenerated between dispatch and
+   event arrival? Does the match also check identity (provider object ID),
+   revision, or amount, or just positional keys?
 3. **Abuse cases on crown jewels** — money movement, auth escalation, quota bypass.
    Think as an attacker WITH a valid account.
 4. **Cross-tier contract drift** — every seam: request/response shapes, envelope
@@ -118,11 +132,23 @@ Read this file fully — every section applies.
     UNENFORCED at the clause's stakes as severity. Work backward from the clause
     to code; never forward from code (each function looks locally reasonable).
     Procedural safety ("operators are instructed to...") is UNENFORCED.
+21. **Journey walk** — prompt embeds the Phase 0 journeys. For each journey, trace
+    the ACTUAL call chain hop by hop — UI control → posted URL → mount/middleware →
+    auth dependency → handler → DB write → worker pickup → external call →
+    callback/event → user-visible result — citing file:line at every hop. Report
+    the FIRST hop where data, auth, or state does not line up (a payload key the
+    next hop `.get()`s but this hop never set; a route outside the middleware's
+    prefix; a worker gate the boot path never arms). Composition bugs live between
+    locally-correct hops; do not stop at "each function looks fine". Journeys
+    tagged NEEDS-<env> get a static walk with that tag echoed as an explicit
+    unverified hop, never silently skipped.
 
 ## §coverage — hunt list for coverage-mode readers
 
 Append to each reader's file-list prompt: "While reading, hunt ALL of: logic errors,
 dead/unreachable branches, fail-open error handling, contract mismatches with code
 you can see called, hardcoded values that must match external systems, sensitive
-data in logs, comments/docstrings that contradict the code, and stubs presenting as
-implemented."
+data in logs, comments/docstrings that contradict the code, stubs presenting as
+implemented, user-facing strings promising behavior the wired handler does not
+perform, payload keys read that no visible producer sets, and external side-effect
+calls whose attempt-evidence is not durably committed before the call."
